@@ -343,20 +343,25 @@ export async function exportFullConfiguration({
   const isForgeOpsDeployment =
     state.getDeploymentType() === Constants.FORGEOPS_DEPLOYMENT_TYPE_KEY;
   const isPlatformDeployment = isCloudDeployment || isForgeOpsDeployment;
+  const isIdmDeployment =
+    state.getDeploymentType() === Constants.IDM_DEPLOYMENT_TYPE_KEY;
   const errorCallback = getErrorCallback(resultCallback);
 
-  const config = await exportWithErrorHandling(
+  let config = {} as ConfigEntityExportInterface;
+  if (isPlatformDeployment || isClassicDeployment) {
+    config = await exportWithErrorHandling(
     exportAmConfigEntities,
     {
-      includeReadOnly,
-      onlyRealm,
-      onlyGlobal,
-      errorCallback,
+        includeReadOnly,
+        onlyRealm,
+        onlyGlobal,
+        errorCallback,
       state,
-    },
+      },
     'AM Config Entities',
     resultCallback
   );
+  }
 
   // export global config
   let globalConfig = {} as FullGlobalExportInterface;
@@ -375,7 +380,7 @@ export async function exportFullConfiguration({
       },
       'Mappings',
       resultCallback,
-      isPlatformDeployment
+      isPlatformDeployment || isIdmDeployment
     );
 
     // Export servers and server properties
@@ -416,7 +421,7 @@ export async function exportFullConfiguration({
           stateObj,
           'Email Templates',
           resultCallback,
-          isPlatformDeployment
+          isPlatformDeployment || isIdmDeployment
         )
       )?.emailTemplate,
       idm: (
@@ -432,7 +437,7 @@ export async function exportFullConfiguration({
           },
           'IDM Config Entities',
           resultCallback,
-          isPlatformDeployment
+          isPlatformDeployment || isIdmDeployment
         )
       )?.idm,
       internalRole: (
@@ -441,7 +446,7 @@ export async function exportFullConfiguration({
           stateObj,
           'Internal Roles',
           resultCallback,
-          isPlatformDeployment
+          isPlatformDeployment || isIdmDeployment
         )
       )?.internalRole,
       mapping: mappings?.mapping,
@@ -451,7 +456,7 @@ export async function exportFullConfiguration({
           stateObj,
           'Realms',
           resultCallback,
-          includeReadOnly || isClassicDeployment
+          (includeReadOnly && isPlatformDeployment) || isClassicDeployment
         )
       )?.realm,
       scripttype: (
@@ -460,7 +465,7 @@ export async function exportFullConfiguration({
           stateObj,
           'Script Types',
           resultCallback,
-          includeReadOnly || isClassicDeployment
+          (includeReadOnly && isPlatformDeployment) || isClassicDeployment
         )
       )?.scripttype,
       secret: (
@@ -487,7 +492,8 @@ export async function exportFullConfiguration({
           exportServices,
           globalStateObj,
           'Services',
-          resultCallback
+          resultCallback,
+          isPlatformDeployment || isClassicDeployment
         )
       )?.service,
       site: (
@@ -520,7 +526,8 @@ export async function exportFullConfiguration({
       Object.keys(globalConfig.idm)
         .filter(
           (k) =>
-            k === 'ui/themerealm' ||
+            (k === 'ui/themerealm' && isPlatformDeployment) ||
+            isClassicDeployment ||
             k === 'sync' ||
             k.startsWith('mapping/') ||
             k.startsWith('emailTemplate/')
@@ -530,7 +537,10 @@ export async function exportFullConfiguration({
   }
 
   const realmConfig = {};
-  if (!onlyGlobal || onlyRealm) {
+  if (
+    (isPlatformDeployment || isClassicDeployment) &&
+    (!onlyGlobal || onlyRealm)
+  ) {
     // Export realm configs
     const activeRealm = state.getRealm();
     for (const realm of Object.keys(config.realm)) {
@@ -772,6 +782,9 @@ export async function importFullConfiguration({
   const isForgeOpsDeployment =
     state.getDeploymentType() === Constants.FORGEOPS_DEPLOYMENT_TYPE_KEY;
   const isPlatformDeployment = isCloudDeployment || isForgeOpsDeployment;
+  const isIdmDeployment =
+    state.getDeploymentType() === Constants.IDM_DEPLOYMENT_TYPE_KEY;
+
   const {
     reUuidJourneys,
     reUuidScripts,
@@ -910,7 +923,7 @@ export async function importFullConfiguration({
       indicatorId,
       'IDM Config Entities',
       resultCallback,
-      isPlatformDeployment && !!importData.global.idm
+      (isPlatformDeployment || isIdmDeployment) && !!importData.global.idm
     )
   );
   response.push(
@@ -923,7 +936,8 @@ export async function importFullConfiguration({
       indicatorId,
       'Email Templates',
       resultCallback,
-      isPlatformDeployment && !!importData.global.emailTemplate
+      (isPlatformDeployment || isIdmDeployment) &&
+        !!importData.global.emailTemplate
     )
   );
   response.push(
@@ -937,7 +951,7 @@ export async function importFullConfiguration({
       indicatorId,
       'Mappings',
       resultCallback,
-      isPlatformDeployment
+      isPlatformDeployment || isIdmDeployment
     )
   );
   response.push(
@@ -951,6 +965,7 @@ export async function importFullConfiguration({
       indicatorId,
       'Services',
       resultCallback,
+      (isPlatformDeployment || isClassicDeployment) &&
       !!importData.global.service
     )
   );
@@ -988,7 +1003,8 @@ export async function importFullConfiguration({
       indicatorId,
       'Internal Roles',
       resultCallback,
-      isPlatformDeployment && !!importData.global.internalRole
+      (isPlatformDeployment || isIdmDeployment) &&
+        !!importData.global.internalRole
     )
   );
   stopProgressIndicator({
@@ -997,6 +1013,7 @@ export async function importFullConfiguration({
     status: 'success',
     state,
   });
+  if (isPlatformDeployment || isClassicDeployment) {
   // Import to realms
   const currentRealm = state.getRealm();
   for (const realm of Object.keys(importData.realm)) {
@@ -1269,6 +1286,7 @@ export async function importFullConfiguration({
       resultCallback
     )
   );
+}
   // Filter out any null or empty results
   response = response.filter(
     (o) =>
